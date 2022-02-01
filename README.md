@@ -1,2 +1,2 @@
-# pySubgroup
+# sd4py
 
