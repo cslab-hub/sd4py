@@ -1,3 +1,16 @@
+'''
+sd4py is a package that makes it easy to perform subgroup discovery on tabular data. It is extremely simple to use. Call the `sd4py.discover_subgroups()` function on a pandas dataframe and a collection of subgroups will be returned. 
+
+This package provides a Python interface for using the Java application VIKAMINE. 
+
+Subgroup discovery is based on finding patterns within some (explanatory) columns of data that then help to explain another (target) column of data. 
+The goal of the subgroup discovery process will be to understand in what circumstances the target is extreme. With a numeric target, this means finding circumstances in which the value is exceptionally high (or exceptionally low) on average.
+For a non-numeric target, this means looking for circumstances when a particular value is especially likely to occur.
+One of the key benefits of this approach is that the outputs are interpretable, being expressed as a readable combination of rules like (e.g.)  "'Temperature'=high AND 'Pressure'=low". 
+
+The package contains a `discover_subgroups()` function that finds subgroups based on a pandas `DataFrame` and a specifed target column. The package also includes custom python objects for holding the results. 
+'''
+
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -11,6 +24,16 @@ import pandas as pd
 import numpy as np
 
 class PyOntology:
+    '''
+    Puts data into a Java `Ontology` object for use with the underlying Java subgroup discovery application. 
+    
+    It is not necessary to use this class explicitly; pandas dataframes will automatically be converted into a `PyOntology` object when passed into `discover_subgroups()`. 
+    However, if the dataset is large, and subgroup discovery will be performed multiple times, then the user may opt to convert the dataset into a `PyOntology` to pass into `discover_subgroups()` for the sake of performance. 
+    
+    Attributes
+    --------------
+    The only attribute of the class is `ontology`, created during initialisation, which is bound to an `Ontology` object in the Java runtime. 
+    '''
     
     def __init__(self, df):
         
@@ -27,7 +50,7 @@ class PyOntology:
         
         for name, x in df.iteritems():
             
-            if x.dtype == 'object' or x.dtype == 'bool' or x.dtype.name == 'category': # category depends on whether its ordered?
+            if x.dtype == 'object' or x.dtype == 'bool' or x.dtype.name == 'category': # category depends on whether it's ordered?
 
                 nominal_arrays.append(
                     JArray(JString)(x.astype(str))
@@ -71,6 +94,13 @@ class PyOntology:
 
 
 class PyNumericSelector:
+    '''
+    Represents a rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
+    The relevant attribute name in the data is stored in `attribute`. 
+    This contains a `numeric lower_bound`, `upper_bound`, plus booleans `include_lower_bound` and `include_upper_bound` to decide whether border values are included in the selection. 
+    
+    Note that this is detached from the Java runtime, and so is a plain python object. 
+    '''
     
     def __init__(self, attribute, lower_bound, upper_bound, include_lower_bound, include_upper_bound):
         
@@ -122,6 +152,12 @@ class PyNumericSelector:
 
 
 class PyNominalSelector:
+    '''
+    Represents a rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
+    It indicates an attribute-value pair through `attribute` and `value`.
+    
+    Note that this is detached from the Java runtime, and so is a plain python object. 
+    '''
     
     def __init__(self, attribute, value):
         
@@ -134,6 +170,22 @@ class PyNominalSelector:
 
 
 class PySubgroup:
+    '''
+    Represents a subgroup in terms of its selectors, target value, size and quality. 
+    
+    Note that this is detached from the Java runtime, and so is a plain python object. 
+    
+    Attributes
+    --------------
+    selectors: list
+        A list of `PySelector` objects representing the rules constituting the subgroup/pattern. 
+    target_value: float
+        The value of the target variable for this subgroup (when evaluated against the dataset originally used for subgroup discovery). 
+    size: int
+        The number of members in this subgroup (when evaluated against the dataset originally used for subgroup discovery). 
+    quality: float
+        The quality of this subgroup (when applying the quality function to the dataset originally used for subgroup discovery). 
+    '''
     
     def __init__(self, selectors, target_value, size, quality):
         
@@ -147,6 +199,19 @@ class PySubgroup:
         return " AND ".join([str(sel) for sel in self.selectors]).strip()
     
     def get_indices(self, data):
+        '''
+        Get the indices of rows that meet the subgroup definition for a specified dataset. 
+        
+        Parameters
+        ----------------
+        data: pandas DataFrame
+            The dataset in which to look for (the indices of) rows that match the subgroup definition. 
+            
+        Returns
+        -----------
+        index: pandas Index
+            The index identifying rows that meet the subgroup definition in the dataset provided. 
+        '''
         
         logical_indices = np.ones(data.index.shape, dtype=bool)
         
@@ -170,12 +235,39 @@ class PySubgroup:
         return data.index[logical_indices]
     
     def get_rows(self,data):
+        '''
+        Get the rows that meet the subgroup definition for a specified dataset. 
+        
+        Parameters
+        ----------------
+        data: pandas DataFrame
+            The dataset in which to look for rows that match the subgroup definition. 
+            
+        Returns
+        -----------
+        rows: pandas DataFrame
+            A selection of rows in the provided dataset that meet the subgroup definition. 
+        '''
         
         return data.loc[self.get_indices(data)]
 
 
 
 class PySubgroupResults:
+    '''
+    A collection of subgroups, returned as a result of performing subgroup discovery.
+    
+    Note that this is detached from the Java runtime, and so is a plain python object. 
+    
+    Attributes
+    --------------
+    subgroups: list
+        A list of `PySubgroup` objects. 
+    population_value: float
+        The value of the target variable across the entire dataset originally used for subgroup discovery. 
+    population_size: int
+        The number of rows in the dataset originally used for subgroup discovery. 
+    '''
     
     def __init__(self, subgroups, population_value, population_size):
         
@@ -184,6 +276,14 @@ class PySubgroupResults:
         self.population_size = population_size
     
     def to_df(self):
+        '''
+        Convert the subgroups included in this object into an easy-to-read pandas dataframe for viewing. 
+        
+        Returns
+        -----------
+        subgroups_df: pandas DataFrame
+            A table showing the subgroup definitions and associated important values like size, target value, and quality. 
+        '''
         
         return pd.DataFrame([{"pattern":str(sg),"target_quantity":sg.target_value,"size":sg.size,"quality":sg.quality} for sg in self.subgroups])
 
@@ -206,6 +306,55 @@ def discover_subgroups(
     postfilter="",
     postfilter_param=0.00 ## Must be provided for most postfiltering types
 ):
+    '''
+    Search for interesting subgroups within a dataset. 
+    
+    Parameters
+    ----------------
+    ontology: pandas DataFrame or PyOntology object. 
+        The data to use to peform subgroup discovery. Can be a pandas DataFrame, or a PyOntology object. 
+    target: string
+        The name of the column to be used as the target
+    included_attributes: list, optional
+        A list of strings containing the names of columns to use. If not specified, all columns of the data will be used. 
+    nbins: int, optional
+        The number of bins to use when discretising numeric variables. Default value is 3. 
+    method: string, optional
+        Used to decide which algorithm to use. Must be one of Beam-Search `beam`, BSD `bsd`, SD-Map `sdmap`, SD-Map enabling internal disjunctions `sdmap-dis`. The default is `sdmap`.
+    qf: string, optional
+        Used to decide which algorithm to use. Must be one of Adjusted Residuals `ares`, Binomial Test `bin`, Chi-Square Test `chi2`, Gain `gain`, Lift `lift`, Piatetsky-Shapiro `ps`, Relative Gain `relgain`, Weighted Relative Accuracy `wracc`. The default is qf = `ps`.
+    k: int, optional
+        Maximum number (top-k) of patterns to discover, i.e., the best k patterns according to the selected quality function. The default is 20. 
+    minqual: float, optional
+        The minimal quality. Defaults to 0, meaning there is no minimum.
+    minsize: int, optional
+        The minimum size of a subgroup in order for it to be included in the results. Defaults to 0, meaning there is no minimum. 
+    mintp: int, optional
+        The minimum number of true positives in a subgroup (relevant for binary target concepts only). Defaults to 0, meaning there is no minimum
+    max_selectors: int, optional
+        The maximum number of selectors/rules included in a subgroup. The default is 3.
+    ignore_defaults: bool, optional
+        If set to True , the values in the first row of data will be considered ‘default values’, and the same values will be ignored when searching for subgroups. Defaults to False. 
+    filter_irrelevant: bool, optional
+        Whether irrelevant patterns are filtered out. Note that this negatively impacts performance. Defaults to False. 
+    postfilter: string, optional
+        Which post-processing filter is applied. 
+        Can be one of: 
+         * Minimum Improvement (Global) min-improve-global, which checks the patterns against all possible generalisations; 
+         * Minimum Improvement (Pattern Set) min-improve-set, checks the patterns against all their generalisations in the result set, 
+         * Relevancy Filter relevancy, removes patterns that are strictly irrelevant, 
+         * Significant Improvement (Global) sig-improve-global, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all their possible generalizations, 
+         * Significant Improvement (Set) sig-improve-set, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all generalizations in the result set,
+         * Weighted Covering weighted-covering, performs weighted covering on the data in order to select a covering set of subgroups while reducing the overlap on the data. 
+        By default, no postfilter is set, i.e., postfilter = "".
+    postfilter_param: float, optional
+        Provides the corresponding parameter value for the filtering chosen in postfilter. Must be provided for most postfiltering types
+    
+    Returns
+    -----------
+    subgroups: PySubgroupResults
+        The discovered subgroups. 
+    '''
     
     if not isinstance(ontology, PyOntology):
     
