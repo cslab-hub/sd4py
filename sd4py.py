@@ -340,12 +340,12 @@ def discover_subgroups(
     postfilter: string, optional
         Which post-processing filter is applied. 
         Can be one of: 
-         * Minimum Improvement (Global) min-improve-global, which checks the patterns against all possible generalisations; 
-         * Minimum Improvement (Pattern Set) min-improve-set, checks the patterns against all their generalisations in the result set, 
-         * Relevancy Filter relevancy, removes patterns that are strictly irrelevant, 
-         * Significant Improvement (Global) sig-improve-global, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all their possible generalizations, 
-         * Significant Improvement (Set) sig-improve-set, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all generalizations in the result set,
-         * Weighted Covering weighted-covering, performs weighted covering on the data in order to select a covering set of subgroups while reducing the overlap on the data. 
+         * Minimum Improvement (Global) `min_improve_global`, which checks the patterns against all possible generalisations; 
+         * Minimum Improvement (Pattern Set) `min_improve_set`, checks the patterns against all their generalisations in the result set, 
+         * Relevancy Filter `relevancy`, removes patterns that are strictly irrelevant, 
+         * Significant Improvement (Global) `sig_improve_global`, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all their possible generalizations, 
+         * Significant Improvement (Set) `sig_improve_set`, removes patterns that do not significantly improve (default 0.01 level, can be overridden with postfilter_param) with respect to all generalizations in the result set,
+         * Weighted Covering `weighted_covering`, performs weighted covering on the data in order to select a covering set of subgroups while reducing the overlap on the data. 
         By default, no postfilter is set, i.e., postfilter = "".
     postfilter_param: float, optional
         Provides the corresponding parameter value for the filtering chosen in postfilter. Must be provided for most postfiltering types
@@ -358,7 +358,7 @@ def discover_subgroups(
     
     if not isinstance(ontology, PyOntology):
     
-        ontology = PyOntology(ontology)
+        ontology = PyOntology(ontology.reset_index(drop=True)) ## Reset index because pandas seems to confuse itself when there is a MultiIndex!!!
     
     ont = ontology.ontology
     
