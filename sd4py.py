@@ -358,7 +358,7 @@ def discover_subgroups(
     
     if not isinstance(ontology, PyOntology):
     
-        ontology = PyOntology(ontology)
+        ontology = PyOntology(ontology.reset_index(drop=True)) ## Reset index because pandas seems to confuse itself when there is a MultiIndex!!!
     
     ont = ontology.ontology
     
