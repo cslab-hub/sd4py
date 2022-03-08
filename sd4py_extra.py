@@ -223,7 +223,7 @@ def confidence_intervals_to_boxplots(bootstrapping_results, labels = None):
     return plt.gcf()
 
 
-def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
+def confidence_precision_recall_f1(subgroups, data, target, value, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
     '''
     Used to provide an estimate of how variable the performance of each subgroup is. 
     Applies to nominal variables, where the precision, recall and $F_1$ score are used to quantify how well a subgroup performs. 
@@ -236,8 +236,8 @@ def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_d
         The data to be used to evaluate the subgroups; bootstrapping works by drawing samples from this data using replacement.
     target: string
         The name of the target variable. 
-    value: object, optional
-        For nominal target variables only. The value of the target variable that counts as the 'positive' class. 
+    value: object
+        The value of the target variable that counts as the 'positive' class. 
     ignore_defaults: boolean, optional
         If True, then the first row in data will be treated as containing 'default values' to be ignored in the processing. 
     number_simulations: int, optional
@@ -279,7 +279,7 @@ def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_d
         
         return out 
     
-    bootstrapping_results, aggregation = bootstrapping(subgroups, data, target, metric_function, aggregation_function, value=value, 
+    bootstrapping_results, aggregation = bootstrapping(subgroups, data, target, metric_function, aggregation_function, 
                 ignore_defaults=ignore_defaults, number_simulations=number_simulations, frac=frac, replace=replace)
     
     return bootstrapping_results, pd.DataFrame({'pattern':str(subgroup), **values} for subgroup, values in aggregation.items())
@@ -690,7 +690,7 @@ def radar_plot(data, prop_scale=3, subplot=111, text_size = 10, axis_padding = 1
     return ax
 
 
-def subgroup_overview(subgroup, target, selection_data, visualisation_data=None, use_complement=True):
+def subgroup_overview(subgroup, target, selection_data, visualisation_data=None, use_complement=True, axis_padding = 15):
     '''
     Creates a four-panel matplotlib visualisation for a single subgroup. 
     From left to right, top to bottom, this shows: 
@@ -806,7 +806,7 @@ def subgroup_overview(subgroup, target, selection_data, visualisation_data=None,
         ymins = pd.concat([numeric_ymins, nominal_ymins])
         ymaxes = pd.concat([numeric_ymaxes, nominal_ymaxes])
         
-        return radar_plot(total, prop_scale=prop_scale, ymins=ymins, ymaxes=ymaxes, subplot=subplot)
+        return radar_plot(total, prop_scale=prop_scale, ymins=ymins, ymaxes=ymaxes, subplot=subplot, axis_padding=axis_padding)
         
     ## Target
     
