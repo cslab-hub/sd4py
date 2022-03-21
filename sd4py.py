@@ -23,6 +23,8 @@ from org.vikamine.kernel.subgroup.selectors import *
 import pandas as pd
 import numpy as np
 
+import copy
+
 class PyOntology:
     '''
     Puts data into a Java `Ontology` object for use with the underlying Java subgroup discovery application. 
@@ -171,7 +173,7 @@ class PyNominalSelector:
 
 class PySubgroup:
     '''
-    Represents a subgroup in terms of its selectors, target value, size and quality. 
+    Represents a subgroup in terms of its selectors, target evaluation, size and quality. 
     
     Note that this is detached from the Java runtime, and so is a plain python object. 
     
@@ -179,20 +181,26 @@ class PySubgroup:
     --------------
     selectors: list
         A list of `PySelector` objects representing the rules constituting the subgroup/pattern. 
-    target_value: float
+    target_evaluation: float
         The value of the target variable for this subgroup (when evaluated against the dataset originally used for subgroup discovery). 
     size: int
         The number of members in this subgroup (when evaluated against the dataset originally used for subgroup discovery). 
     quality: float
         The quality of this subgroup (when applying the quality function to the dataset originally used for subgroup discovery). 
+    target: string
+        The name of the target column.
+    target_value: object
+        The value of the target variable that counts as the 'positive' class. 
     '''
     
-    def __init__(self, selectors, target_value, size, quality):
+    def __init__(self, selectors, target_evaluation, size, quality, target, target_value):
         
         self.selectors = selectors
-        self.target_value = target_value
+        self.target_evaluation = target_evaluation
         self.size = size
         self.quality = quality
+        self.target = target
+        self.target_value = target_value
         
     def __str__(self):
         
@@ -220,17 +228,17 @@ class PySubgroup:
             if isinstance(sel, PyNumericSelector):
                 
                 if sel.include_lower_bound and sel.lower_bound != float("-inf"):
-                    logical_indices = logical_indices & (data[sel.attribute] >= sel.lower_bound)
+                    logical_indices = logical_indices & (data[sel.attribute].values >= sel.lower_bound)
                 elif sel.lower_bound != float("-inf"):
-                    logical_indices = logical_indices & (data[sel.attribute] > sel.lower_bound)
+                    logical_indices = logical_indices & (data[sel.attribute].values > sel.lower_bound)
                 if sel.include_upper_bound and sel.upper_bound != float("inf"):
-                    logical_indices = logical_indices & (data[sel.attribute] <= sel.upper_bound)
+                    logical_indices = logical_indices & (data[sel.attribute].values <= sel.upper_bound)
                 elif sel.upper_bound != float("inf"):
-                    logical_indices = logical_indices & (data[sel.attribute] < sel.upper_bound)
+                    logical_indices = logical_indices & (data[sel.attribute].values < sel.upper_bound)
             
             if isinstance(sel, PyNominalSelector):
                 
-                logical_indices = logical_indices & (data[sel.attribute].astype(str) == sel.value)
+                logical_indices = logical_indices & (data[sel.attribute].astype(str).values == sel.value)
                     
         return data.index[logical_indices]
     
@@ -263,17 +271,52 @@ class PySubgroupResults:
     --------------
     subgroups: list
         A list of `PySubgroup` objects. 
-    population_value: float
+    population_evaluation: float
         The value of the target variable across the entire dataset originally used for subgroup discovery. 
     population_size: int
         The number of rows in the dataset originally used for subgroup discovery. 
+    target: string
+        The name of the target column.
+    target_value: object
+        The value of the target variable that counts as the 'positive' class. 
     '''
     
-    def __init__(self, subgroups, population_value, population_size):
+    def __init__(self, subgroups, population_evaluation, population_size, target, target_value):
         
         self.subgroups = subgroups
-        self.population_value = population_value
+        self.population_evaluation = population_evaluation
         self.population_size = population_size
+        self.target = target
+        self.target_value = target_value
+    
+    def __len__(self):
+        
+        return len(self.subgroups)
+    
+    def __iter__(self):
+    
+        return self.subgroups.__iter__()
+    
+    def __getitem__(self, selection):
+    
+        if hasattr(selection, '__iter__'):
+        
+            subgroups = [self.subgroups[i] for i in selection]
+            
+            out = copy.copy(self)
+            out.subgroups = subgroups
+            
+            return out
+    
+        if isinstance(selection, slice):
+
+            out = copy.copy(self)
+            out.subgroups = self.subgroups.__getitem__(selection)
+            
+            return out 
+        
+        return self.subgroups[selection]
+        
     
     def to_df(self):
         '''
@@ -285,12 +328,13 @@ class PySubgroupResults:
             A table showing the subgroup definitions and associated important values like size, target value, and quality. 
         '''
         
-        return pd.DataFrame([{"pattern":str(sg),"target_quantity":sg.target_value,"size":sg.size,"quality":sg.quality} for sg in self.subgroups])
+        return pd.DataFrame([{"pattern":str(sg),"target_evaluation":sg.target_evaluation,"size":sg.size,"quality":sg.quality} for sg in self.subgroups])
 
 
 def discover_subgroups(
     ontology,
     target,
+    target_value=None,
     included_attributes=None,
 #    discretise=True,
     nbins=3,
@@ -314,7 +358,9 @@ def discover_subgroups(
     ontology: pandas DataFrame or PyOntology object. 
         The data to use to peform subgroup discovery. Can be a pandas DataFrame, or a PyOntology object. 
     target: string
-        The name of the column to be used as the target
+        The name of the column to be used as the target.
+     target_value: object, optional
+        The value of the target variable that counts as the 'positive' class. Not needed for a numeric target, in which case the mean of the target variable will be used for subgroup discovery.
     included_attributes: list, optional
         A list of strings containing the names of columns to use. If not specified, all columns of the data will be used. 
     nbins: int, optional
@@ -355,6 +401,20 @@ def discover_subgroups(
     subgroups: PySubgroupResults
         The discovered subgroups. 
     '''
+    
+    if target_value is not None :
+    
+        if isinstance(ontology, PyOntology):
+        
+            raise ValueError("target_value cannot be provided when passing in a PyOntology instead of a pands DataFrame.")
+        
+        target_bool = ontology[target] == target_value
+        
+        ontology = ontology.drop(columns=target).join(target_bool)
+    
+    elif ontology[target].dtype == 'object' or ontology[target].dtype == 'bool' or ontology[target].dtype.name == 'category':
+        
+        target_value = ontology[target].iloc[0]
     
     if not isinstance(ontology, PyOntology):
     
@@ -469,9 +529,11 @@ def discover_subgroups(
                 py_selectors,
                 subgroup_value,
                 subgroup_size,
-                subgroup_quality
+                subgroup_quality,
+                target,
+                target_value
             )
         )
     
-    return PySubgroupResults(py_subgroups, population_value, population_size)
+    return PySubgroupResults(py_subgroups, population_value, population_size, target, target_value)
 
