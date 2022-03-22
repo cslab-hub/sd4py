@@ -10,23 +10,7 @@ import networkx as nx
 import sd4py
 
 
-def bootstrapping_inner(subgroup, samples, target, metric_function):
-    '''
-    Helper function to perform bootstrapping. Iterates over a list of samples and computes the `metric_function` on each, for a given subgroup. 
-    '''
-    
-    metric_values = []
-    
-    for sample in samples:
-        
-        subgroup_sample = subgroup.get_rows(sample)
-
-        metric_values.append(metric_function(sample, subgroup_sample, target))
-                    
-    return metric_values
-
-
-def bootstrapping(subgroups, data, target, metric_function, aggregation_function=None, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
+def bootstrapping(subgroups, data, metric_function, aggregation_function=None, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
     '''
     Provides some estimate of variability for subgroups. Multiple samples (with replacement) are drawn from the data, 
     and subgroups are evaluated for each sample (using the metric_function).
@@ -38,10 +22,8 @@ def bootstrapping(subgroups, data, target, metric_function, aggregation_function
         The subgroup(s) for which to perform bootstrapping.
     data: DataFrame
         The data to be used to evaluate the subgroups; bootstrapping works by drawing samples from this data using replacement.
-    target: string
-        The name of the target variable. 
     metric_function: function
-        The function to use to evaluate the how well the subgroup is working on an individual sample
+        The function to use to evaluate the how well the subgroup is working on an individual sample. Must have the following parameters: (sample, subgroup_sample), where `sample` is a sample of the data, and `subgroup_sample` is the same but filtered to only include subgroup members. 
     aggregation_function: function, optional
         Used to aggregate across the samples. If not provided, the full list of scores (calculated by metric_function) over all the samples for each subgroup will be returned. 
     ignore_defaults: boolean, optional
@@ -61,6 +43,8 @@ def bootstrapping(subgroups, data, target, metric_function, aggregation_function
         A dict with subgroup names as keys and aggregated results as values (or an empty dict if there is no aggregation function), or when using only one subgroup, just the aggregation (or None if there is no aggregation function).
     '''
     
+    ## This code is quite ugly but that was needed to speed things up. 
+
     samples = []
     
     for x in range(number_simulations):
@@ -74,42 +58,99 @@ def bootstrapping(subgroups, data, target, metric_function, aggregation_function
             sample = sample.replace(data.iloc[0,:], np.NaN)
             
         samples.append(sample.reset_index(drop=True))
+        
+    selectors = set()
     
+    for subgroup in subgroups:
+    
+        for sel in subgroup.selectors:
+        
+            selectors.add(sel)
+            
+    selectors = list(selectors)
+        
     if isinstance(subgroups, sd4py.PySubgroupResults):
         
         subgroups = subgroups.subgroups
     
     if isinstance(subgroups, list):
         
-        results = {}
-        aggregation = {}
+        def sample_indices(sample):
+            
+            def get_indices(sel):
+            
+                logical_indices = np.ones(sample.index.shape, dtype=bool)
+            
+                if isinstance(sel, sd4py.PyNumericSelector):
+                    
+                    if sel.include_lower_bound and sel.lower_bound != float("-inf"):
+                        np.logical_and(logical_indices, sample[sel.attribute].values >= sel.lower_bound, out = logical_indices)  ## It's about x10 faster to use .values (i.e. numpy arrays and therefore numpy functions)
+                    elif sel.lower_bound != float("-inf"):
+                        np.logical_and(logical_indices, sample[sel.attribute].values > sel.lower_bound, out = logical_indices)
+                    if sel.include_upper_bound and sel.upper_bound != float("inf"):
+                        np.logical_and(logical_indices, sample[sel.attribute].values <= sel.upper_bound, out = logical_indices)
+                    elif sel.upper_bound != float("inf"):
+                        np.logical_and(logical_indices, sample[sel.attribute].values < sel.upper_bound, out = logical_indices)
+                 
+                if isinstance(sel, sd4py.PyNominalSelector):
+                    
+                    np.logical_and(logical_indices, sample[sel.attribute].astype(str).values == sel.value, out = logical_indices)
+                    
+                return logical_indices
+            
+            return dict(zip(map(str, selectors) , map(get_indices, selectors)))
         
-        for subgroup in subgroups:
+        samples_indices = dict(zip(range(number_simulations), map(sample_indices, samples)))
+
+        
+        def process_subgroup(subgroup):
             
-            subgroup_values = bootstrapping_inner(subgroup, samples, target, metric_function)
-            
-            results[str(subgroup)] = subgroup_values
-            
-            if aggregation_function is not None:
+            def get_metric_values(args):
                 
-                aggregation[str(subgroup)] = aggregation_function(subgroup_values)
+                idx, sample = args
+                
+                logical_indices = np.ones(sample.index.shape, dtype=bool)
+                
+                for sel in subgroup.selectors:
+                    
+                    np.logical_and(logical_indices, samples_indices[idx][str(sel)], out = logical_indices)
+                    
+                subgroup_sample = sample[logical_indices]
+
+                return metric_function(sample, subgroup_sample)
+            
+            return list(map(get_metric_values, enumerate(samples)))
+        
+        results = dict(zip(map(str, subgroups), map(process_subgroup, subgroups)))
+        
+        
+        if aggregation_function is not None:
+                    
+            aggregation = {key: aggregation_function(val) for key, val in results.items()}
+        
         
         return results, aggregation
     
-    else:
+    else: ## Not a list 
+    
+        metric_values = []
         
-        results = bootstrapping_inner(subgroups, samples, target, metric_function)
+        for sample in samples:
+            
+            subgroup_sample = subgroup.get_rows(sample)
+
+            metric_values.append(metric_function(sample, subgroup_sample))
         
         if aggregation_function is None:
 
-            return results, None
+            return metric_values, None
 
         else:
 
-            return results, aggregation_function(results)
+            return metric_values, aggregation_function(metric_values)
 
 
-def confidence_intervals(subgroups, data, target, value=None, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
+def confidence_intervals(subgroups, data, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
     '''
     Provides some estimate of variability of the target value for subgroups. Uses bootstrapping to achieve this. 
     The target value and the size of each subgroup is calculated across 100 samples of the data. The 0.05 and 0.95 quantiles are returned per subgroup. 
@@ -121,10 +162,6 @@ def confidence_intervals(subgroups, data, target, value=None, ignore_defaults=Fa
         The subgroup(s) for which to estimate confidence intervals.
     data: DataFrame
         The data to be used to evaluate the subgroups; bootstrapping works by drawing samples from this data using replacement.
-    target: string
-        The name of the target variable. 
-    value: object, optional
-        For nominal target variables only. The value of the target variable that counts as the 'positive' class. 
     ignore_defaults: boolean, optional
         If True, then the first row in data will be treated as containing 'default values' to be ignored in the processing. 
     number_simulations: int, optional
@@ -142,25 +179,23 @@ def confidence_intervals(subgroups, data, target, value=None, ignore_defaults=Fa
         A DataFrame with the estimated confidence intervals, indexed by subgroup name. 
     '''
     
+    target = subgroups.target
+    
     if data.loc[:,target].dtype == 'object' or data.loc[:,target].dtype == 'bool' or data.loc[:,target].dtype.name == 'category': ## if nominal
             
-        if value is None:
-
-            raise ValueError("Target value must be supplied for nominal target.")
-            
-        def metric_function(sample, subgroup_sample, target):
+        def metric_function(sample, subgroup_sample):
             
             subgroup_sample = subgroup_sample.loc[:,target]
             sample = sample.loc[:,target]
             
             population_share = subgroup_sample.count() / sample.count()
-            target_proportion = subgroup_sample.eq(value).sum() / subgroup_sample.count()  ## what proportion of values is equal to the target value
+            target_proportion = subgroup_sample.eq(subgroups.target_value).sum() / subgroup_sample.count()  ## what proportion of values is equal to the target value
             
             return population_share, target_proportion
         
     else: ## if numeric
         
-        def metric_function(sample, subgroup_sample, target):
+        def metric_function(sample, subgroup_sample):
             
             subgroup_sample = subgroup_sample.loc[:,target]
             sample = sample.loc[:,target]
@@ -181,21 +216,21 @@ def confidence_intervals(subgroups, data, target, value=None, ignore_defaults=Fa
         
         return out 
     
-    bootstrapping_results, confidence_intervals = bootstrapping(subgroups, data, target, metric_function, aggregation_function,  
+    bootstrapping_results, confidence_intervals = bootstrapping(subgroups, data, metric_function, aggregation_function,  
                 ignore_defaults=ignore_defaults, number_simulations=number_simulations, frac=frac, replace=replace)
     
     return bootstrapping_results, pd.DataFrame({'pattern':str(subgroup), **values} for subgroup, values in confidence_intervals.items())
 
 
-def confidence_intervals_to_boxplots(bootstrapping_results, labels = None):
+def confidence_intervals_to_boxplots(bootstrapping_results_list, labels):
     '''
     Takes the outputs of the `confidence_intervals` function and creates a boxplot showing the distribution of the target value, 
     with the width of boxes indicating the relative sizes of the subgroups on average. 
     
     Parameters
     ----------------
-    bootstrapping_results: dict
-        A dict with subgroup names as keys and bootstrapping results as values. 
+    bootstrapping_results_list: list
+        A list with subgroup bootstrapping results as values. 
     labels: list
         The label to use for each subgroup. 
 
@@ -205,16 +240,12 @@ def confidence_intervals_to_boxplots(bootstrapping_results, labels = None):
         The matplotlib Figure of the boxplots
     '''
     
-    if labels is None:
-        
-        labels = list(results_dict.keys())
-    
-    averages = np.stack([np.array(x)[:,1] for x in bootstrapping_results.values()])
+    averages = np.stack([np.array(x)[:,1] for x in bootstrapping_results_list])
 
     for idx, row in enumerate(averages): 
         averages[idx][np.isnan(row)] = row[~np.isnan(row)].mean() # remove nan
 
-    widths = [np.array(x)[:,0].mean() for x in bootstrapping_results.values()]
+    widths = [np.array(x)[:,0].mean() for x in bootstrapping_results_list]
     widths = 0.9 * np.array(widths) / np.max(widths)  ## Box thickness relative to the maximum shown. Adjusted by 0.9 to avoid overlap
 
     plt.boxplot(averages.T, vert=False, widths=widths, labels=labels)
@@ -223,7 +254,7 @@ def confidence_intervals_to_boxplots(bootstrapping_results, labels = None):
     return plt.gcf()
 
 
-def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
+def confidence_precision_recall_f1(subgroups, data, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
     '''
     Used to provide an estimate of how variable the performance of each subgroup is. 
     Applies to nominal variables, where the precision, recall and $F_1$ score are used to quantify how well a subgroup performs. 
@@ -234,10 +265,6 @@ def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_d
         The subgroup(s) for which to estimate confidence intervals.
     data: DataFrame
         The data to be used to evaluate the subgroups; bootstrapping works by drawing samples from this data using replacement.
-    target: string
-        The name of the target variable. 
-    value: object, optional
-        For nominal target variables only. The value of the target variable that counts as the 'positive' class. 
     ignore_defaults: boolean, optional
         If True, then the first row in data will be treated as containing 'default values' to be ignored in the processing. 
     number_simulations: int, optional
@@ -255,13 +282,16 @@ def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_d
         A DataFrame with the estimated confidence intervals (0.05 and 0.95 quantiles from bootstrapping) on each of precision, recall and $F_1$, indexed by subgroup name. 
     '''
     
-    def metric_function(sample, subgroup_sample, target):
+    target = subgroups.target
+    target_value = subgroups.target_value
+    
+    def metric_function(sample, subgroup_sample):
 
         subgroup_sample = subgroup_sample.loc[:,target]
         sample = sample.loc[:,target]
 
-        precision = subgroup_sample.eq(value).sum() / subgroup_sample.count()
-        recall = subgroup_sample.eq(value).sum() / sample.eq(value).sum()
+        precision = subgroup_sample.values.__eq__(target_value).sum() / subgroup_sample.count()    ## Use numpy arrays to check for equality since they're much faster 
+        recall = subgroup_sample.values.__eq__(target_value).sum() / sample.values.__eq__(target_value).sum()    ## Use numpy arrays to check for equality since they're much faster 
         f1 = (2 * precision * recall) / (precision + recall)
 
         return precision, recall, f1
@@ -279,7 +309,7 @@ def confidence_precision_recall_f1(subgroups, data, target, value=None, ignore_d
         
         return out 
     
-    bootstrapping_results, aggregation = bootstrapping(subgroups, data, target, metric_function, aggregation_function, value=value, 
+    bootstrapping_results, aggregation = bootstrapping(subgroups, data, metric_function, aggregation_function, 
                 ignore_defaults=ignore_defaults, number_simulations=number_simulations, frac=frac, replace=replace)
     
     return bootstrapping_results, pd.DataFrame({'pattern':str(subgroup), **values} for subgroup, values in aggregation.items())
@@ -314,7 +344,7 @@ def corrected_hedges_g(sample1, sample2):
     return bias_correction * (sample1.mean() - sample2.mean()) / pooled_sd
 
 
-def confidence_hedges_g(subgroups, data, target, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
+def confidence_hedges_g(subgroups, data, ignore_defaults=False, number_simulations=100, frac=1/3, replace=True):
     '''
     Used to provide an estimate of the effect size for different subgroups when the target variable is numeric. 
     
@@ -345,7 +375,9 @@ def confidence_hedges_g(subgroups, data, target, ignore_defaults=False, number_s
         A DataFrame with the estimated confidence intervals (0.05 and 0.95 quantiles from bootstrapping) on the effect size, indexed by subgroup name. 
     '''
     
-    def metric_function(sample, subgroup_sample, target):
+    target = subgroups.target
+    
+    def metric_function(sample, subgroup_sample):
 
         subgroup_sample = subgroup_sample.loc[:,target]
         sample = sample.loc[:,target]
@@ -367,7 +399,7 @@ def confidence_hedges_g(subgroups, data, target, ignore_defaults=False, number_s
         
         return out 
     
-    bootstrapping_results, aggregation = bootstrapping(subgroups, data, target, metric_function, aggregation_function, 
+    bootstrapping_results, aggregation = bootstrapping(subgroups, data, metric_function, aggregation_function, 
                 ignore_defaults=ignore_defaults, number_simulations=number_simulations, frac=frac, replace=replace)
     
     return bootstrapping_results, pd.DataFrame({'pattern':str(subgroup), **values} for subgroup, values in aggregation.items())
@@ -690,7 +722,7 @@ def radar_plot(data, prop_scale=3, subplot=111, text_size = 10, axis_padding = 1
     return ax
 
 
-def subgroup_overview(subgroup, target, selection_data, visualisation_data=None, use_complement=True):
+def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_complement=True, axis_padding = 15):
     '''
     Creates a four-panel matplotlib visualisation for a single subgroup. 
     From left to right, top to bottom, this shows: 
@@ -704,8 +736,6 @@ def subgroup_overview(subgroup, target, selection_data, visualisation_data=None,
     ----------------
     subgroup: PySubgroup
         The subgroup to be visualised.
-    target: string
-        The name of the target variable.  
     selection_data: DataFrame
         The subgroup will be applied to this data, to select subgroup members. From this, the most interesting columns to visualise will be chosen. If visualisation_data is not provided, this will also be the data used to compute the values that are visualised.
     visualisation_data: DataFrame
@@ -718,6 +748,8 @@ def subgroup_overview(subgroup, target, selection_data, visualisation_data=None,
     fig: Figure
         The matplotlib Figure of the subgroup overview.
     '''
+    
+    target = subgroup.target
     
     if visualisation_data is None:
         
@@ -806,7 +838,7 @@ def subgroup_overview(subgroup, target, selection_data, visualisation_data=None,
         ymins = pd.concat([numeric_ymins, nominal_ymins])
         ymaxes = pd.concat([numeric_ymaxes, nominal_ymaxes])
         
-        return radar_plot(total, prop_scale=prop_scale, ymins=ymins, ymaxes=ymaxes, subplot=subplot)
+        return radar_plot(total, prop_scale=prop_scale, ymins=ymins, ymaxes=ymaxes, subplot=subplot, axis_padding=axis_padding)
         
     ## Target
     
@@ -911,7 +943,7 @@ def subgroup_overview(subgroup, target, selection_data, visualisation_data=None,
     return plt.gcf()
 
 
-def jaccard_visualisation(subgroups_selection, data, minimum_jaccard=0, labels=None):
+def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None):
     '''
     Shows the similarity between a selection of subgroups. Uses the Jaccard similarity between each pair of subgroups to construct edges in a network diagram. 
     
@@ -934,13 +966,13 @@ def jaccard_visualisation(subgroups_selection, data, minimum_jaccard=0, labels=N
     
     if labels is None:
         
-        labels = [str(sg) for sg in subgroups_selection]
+        labels = [str(sg) for sg in subgroups]
     
-    adjacency = np.zeros((len(subgroups_selection), len(subgroups_selection)))
+    adjacency = np.zeros((len(subgroups), len(subgroups)))
 
-    for idx1, subgroup1 in enumerate(subgroups_selection):
+    for idx1, subgroup1 in enumerate(subgroups):
 
-        for idx2, subgroup2 in enumerate(subgroups_selection):
+        for idx2, subgroup2 in enumerate(subgroups):
 
             if idx1 < idx2:
 
@@ -1003,16 +1035,16 @@ def subgroup_background_rectangle(ax, subgroup, features, window_size):
     
     member_indices = subgroup.get_indices(features)
     
-    for i in range(len(features)):
+    for i, index_value in enumerate(features.index):
 
-        value = int(i in member_indices)
-        start = i * window_size
-        end = (i + 1) * window_size
+        value = int(index_value in member_indices)
+        start = (i * window_size) - 1/2 ## -1/2 so first point of the window is included in the rectangle 
+        end = ((i + 1) * window_size) - 1/2  ## -1/2, otherwise an extra point is included in the rectangle 
 
-        plt.axvspan(xmin=start, xmax=end, color='tab:red', lw=0, alpha=value / 4)
+        tmp = plt.axvspan(xmin=start, xmax=end, color='tab:red', lw=0, alpha=value / 4)
 
 
-def time_plot(subgroup, features, *series, timestep_timedelta=None):
+def time_plot(subgroup, features, *series, window_size, use_start = False):
     '''
     Suitable when subgroup discovery was used to analyse windows of timeseries. 
     Shows multiple variables over time, and which windows of the time correspond to subgroup members (from data in the format originally used to discover subgroups).
@@ -1022,20 +1054,24 @@ def time_plot(subgroup, features, *series, timestep_timedelta=None):
     
     Parameters
     ----------------
-    subgroups: PySubgroup object
+    subgroup: PySubgroup object
         The subgroup to visualise.
     features: DataFrame
         The data to be used to determine which windows of time are subgroup members. Should be (a subselection of) the data used first to discover subgroups. 
     n objects containing timeseries: Series or DataFrame objects
         Multiple arguments can be passed; each one should be a Series or DataFrame object with the same sampling frequency and duration as each other.
-    timestep_delta: Timedelta, optional
-        Used to label the x-axis. Should be the Timedelta corresponding to one step in the x direction. If not used, then each timeseries will have an x-axis determined by its index. 
+    timestep_delta: Timedelta
+        Used to label the x-axis. Should be the Timedelta corresponding to one step in the x direction. 
 
     Returns
     -----------
     fig: Figure
         The matplotlib Figure showing multiple variables over time.
     '''
+    
+    timestep_timedelta = series[0].index[1] - series[0].index[0]
+    
+    start = series[0].index[0]
     
     def get_xtick_formatter_function(largest_timedelta, smallest_timedelta):
         
@@ -1083,9 +1119,7 @@ def time_plot(subgroup, features, *series, timestep_timedelta=None):
     assert [len(x) for x in series].count(len(series[0])) == len(series), "Input series are not the same length" ## Check all input series are the same length
 
     num_subplots = len(series)
-    
-    if timestep_timedelta is not None:
-        
+    if not use_start:
         smallest_timedelta = timestep_timedelta
         largest_timedelta = timestep_timedelta * len(series[0])
         formatter = get_xtick_formatter_function(largest_timedelta, smallest_timedelta)
@@ -1093,10 +1127,11 @@ def time_plot(subgroup, features, *series, timestep_timedelta=None):
     for idx, series in enumerate(series):
         
         ax = plt.subplot(num_subplots,1,idx+1)
+        
         if timestep_timedelta is not None:
-            ax.plot(series.values)
+            tmp = ax.plot(series.values)
         else:
-            ax.plot(series)
+            tmp = ax.plot(series)
 
         if isinstance(series, pd.DataFrame):
             name = series.columns.name  ## This can be set with df.rename_axis('New Name', axis=1)
@@ -1106,8 +1141,75 @@ def time_plot(subgroup, features, *series, timestep_timedelta=None):
         ax.annotate(name, xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - 10, 0),
                     xycoords=ax.yaxis.label, textcoords='offset points',
                     size=14, ha='right', va='center')
-        subgroup_background_rectangle(ax, subgroup, features, 60)
+                    
+                    
         ax.set_xticks(ax.get_xticks().tolist()[1:-1])  # First and last xticks always seem irrelevant
-        if timestep_timedelta is not None:
-            ax.set_xticklabels([formatter(x * timestep_timedelta) for x in ax.get_xticks().tolist()], size=12)
 
+        subgroup_background_rectangle(ax, subgroup, features, window_size)
+        
+        if use_start:
+            ax.set_xticklabels([((x * timestep_timedelta) + start) for x in ax.get_xticks().tolist()], size=12)
+        else:
+            ax.set_xticklabels([formatter(x * timestep_timedelta) for x in ax.get_xticks().tolist()], size=12)
+            
+    return plt.gcf()
+
+
+def first_k_non_overlapping(data, subgroups, jaccard_threshold, k=10):
+    '''
+    Finds the first k subgroups that do not overlap (i.e., do not have a Jaccard similarity above the threshold) with earlier subgroups. The orderring of the subgroups is of course important for determining the results. 
+    
+    Parameters
+    ----------------
+    data: DataFrame
+        Data with which to evaluate the overlap between subgroups.
+    subgroups: PySubgroupResults or list
+        The subgroups. 
+    jaccard_threshold: float
+        The threshold for the Jaccard similarity that decides if a subgroup is overlapping with any subgroups already processed. The results will all have a Jaccard similarity with each other that is lower than this threshold. 
+    k: int
+        How many subgroups to look for. 
+
+    Returns
+    -----------
+    non_overlapping: PySubgroupResults or list
+        A PySubgroupResults object or list (whichever was passaed as an argument to `subgroups`) containing the first k subgroups where the Jaccard similarity between them is below the threshold provided. 
+    '''
+
+    non_overlapping = []
+
+    if jaccard_threshold < 1.0:
+
+        for idx1, sg1 in enumerate(subgroups):
+
+            if len(non_overlapping) == 0:
+
+                non_overlapping.append(idx1)
+
+                continue
+
+            overlapping = False
+            
+            indices1 = sg1.get_indices(data)
+
+            for idx2 in non_overlapping:
+                    
+                indices2 = subgroups[idx2].get_indices(data)
+                
+                if (indices1.intersection(indices2).size / indices1.union(indices2).size) > jaccard_threshold:
+
+                    overlapping = True
+
+            if overlapping:
+
+                continue
+                
+            non_overlapping.append(idx1)
+
+            if len(non_overlapping) == k:
+
+                return subgroups[non_overlapping]
+
+        return subgroups[non_overlapping]
+    
+    return subgroups[:k]
