@@ -298,6 +298,35 @@ class PySubgroupResults:
         return self.subgroups.__iter__()
     
     def __getitem__(self, selection):
+
+        if isinstance(selection, list) and isinstance(selection[0], str):
+
+            subgroups = [sg for sg in self.subgroups if str(sg) in selection]
+
+            not_present = [sel for sel in selection if sel not in [str(sg) for sg in subgroups]]
+
+            if len(not_present) > 0:
+
+                raise ValueError("Indices {} not found in {}.".format(not_present, self))
+            
+            else:
+
+                subgroups = [sg for sg in self.subgroups if str(sg) in selection]
+
+                out = copy.copy(self)
+                out.subgroups = subgroups
+            
+                return out
+
+        if isinstance(selection, str):
+
+            for sg in self.subgroups:
+
+                if str(sg) == selection:
+
+                    return sg
+
+            raise ValueError("Index {} not found in {}.".format(not_present, self))
     
         if hasattr(selection, '__iter__'):
         
@@ -359,7 +388,7 @@ def discover_subgroups(
         The data to use to peform subgroup discovery. Can be a pandas DataFrame, or a PyOntology object. 
     target: string
         The name of the column to be used as the target.
-     target_value: object, optional
+    target_value: object, optional
         The value of the target variable that counts as the 'positive' class. Not needed for a numeric target, in which case the mean of the target variable will be used for subgroup discovery.
     included_attributes: list, optional
         A list of strings containing the names of columns to use. If not specified, all columns of the data will be used. 
@@ -411,8 +440,12 @@ def discover_subgroups(
         target_bool = ontology[target] == target_value
         
         ontology = ontology.drop(columns=target).join(target_bool)
+
+    elif ontology[target].dtype == 'bool':
+
+        target_value = True
     
-    elif ontology[target].dtype == 'object' or ontology[target].dtype == 'bool' or ontology[target].dtype.name == 'category':
+    elif ontology[target].dtype == 'object' or ontology[target].dtype.name == 'category':
         
         target_value = ontology[target].iloc[0]
     

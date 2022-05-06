@@ -230,7 +230,7 @@ def confidence_intervals_to_boxplots(bootstrapping_results_list, labels):
     Parameters
     ----------------
     bootstrapping_results_list: list
-        A list with subgroup bootstrapping results as values. 
+        A list with subgroup bootstrapping results as values. Note that the first output from confidence_intervals() is a dictionary, this must be converted into a list by the user for consistent ordering/display. 
     labels: list
         The label to use for each subgroup. 
 
@@ -722,7 +722,7 @@ def radar_plot(data, prop_scale=3, subplot=111, text_size = 10, axis_padding = 1
     return ax
 
 
-def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_complement=True, axis_padding = 15):
+def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_complement=True, axis_padding = 15, figsize=(16, 15)):
     '''
     Creates a four-panel matplotlib visualisation for a single subgroup. 
     From left to right, top to bottom, this shows: 
@@ -742,12 +742,17 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
         If desired, a second dataset can be used to provide the data that is visualised (but not used to select the 'most interesting columns'). 
     use_complement: boolean, optional
         If True, subgroup members will be compared to non-subgroup members. Otherwise, subgroup members will be compared to the full dataset (including subgroup members).  
+    figsize: tuple
+        The size in inches of the figure. 
 
     Returns
     -----------
     fig: Figure
         The matplotlib Figure of the subgroup overview.
     '''
+
+    saved_figsize = plt.rcParams["figure.figsize"]
+    plt.rcParams["figure.figsize"] = figsize
     
     target = subgroup.target
     
@@ -939,11 +944,15 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
 
         ax = visualise_columns(nominal_columns=columns, nominal_values=values, subplot=224)
         ax.set_title('Additional Nominal Variables', pad =20)
-        
-    return plt.gcf()
+    
+    fig = plt.gcf()
+
+    plt.rcParams["figure.figsize"] = saved_figsize
+
+    return fig
 
 
-def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None):
+def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None, margins=0.2):
     '''
     Shows the similarity between a selection of subgroups. Uses the Jaccard similarity between each pair of subgroups to construct edges in a network diagram. 
     
@@ -957,6 +966,8 @@ def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None):
         An edge will only be drawn between two subgroups if their Jaccard similarity is above this value. 
     labels: list
         The label to use for each subgroup. 
+    margins: float
+        The size of the margins to add to the image. Increasing this can help when labels are 'cut off' at the edges. 
 
     Returns
     -----------
@@ -966,7 +977,7 @@ def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None):
     
     if labels is None:
         
-        labels = [str(sg) for sg in subgroups]
+        labels = [re.sub('AND','\nAND',str(sg)) for sg in subgroups]
     
     adjacency = np.zeros((len(subgroups), len(subgroups)))
 
@@ -998,6 +1009,8 @@ def jaccard_visualisation(subgroups, data, minimum_jaccard=0, labels=None):
 
     # labels
     nx.draw_networkx_labels(G, pos, font_size=12, font_family="sans-serif")
+
+    plt.gca().margins(margins)
     
     return plt.gca()
 
