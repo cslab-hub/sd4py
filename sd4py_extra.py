@@ -503,7 +503,7 @@ def find_interesting_columns(subgroup, data, use_complement = True, ignore_defau
         
         if column.dtype == 'object' or column.dtype == 'bool' or column.dtype.name == 'category':  ## nominals
 
-            vals, counts = np.unique(column, return_counts=True)
+            vals, counts = np.unique(column.dropna(), return_counts=True)
 
             for value in vals[np.argsort(-counts)][:5]: ## 5 most common values for this variable; each providing a feature-value pair to investigate
                 
@@ -854,12 +854,14 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
         
         ## For nominal target, use a stacked barchart to visualise distribution
 
+        target_data = visualisation_data[target][~visualisation_data[target].isna()] # get rid of NaN
+
         if use_complement:
             pd.concat([
-                pd.Series(*np.unique(visualisation_data.loc[subgroup_indices][target], return_counts=True)[::-1], name='Subgroup') \
-                                / visualisation_data.loc[subgroup_indices][target].count(),
-                pd.Series(*np.unique(visualisation_data.drop(subgroup_indices, axis=0)[target], return_counts=True)[::-1], name='Complement') \
-                                / visualisation_data.drop(subgroup_indices, axis=0)[target].count()
+                pd.Series(*np.unique(target_data.loc[subgroup_indices], return_counts=True)[::-1], name='Subgroup') \
+                                / target_data.loc[subgroup_indices].count(),
+                pd.Series(*np.unique(target_data.drop(subgroup_indices, axis=0), return_counts=True)[::-1], name='Complement') \
+                                / target_data.drop(subgroup_indices, axis=0).count()
             ],axis=1).T.plot(kind='barh', stacked=True, cmap=plt.get_cmap('Set2'), ax=ax)
                         
             for container in ax.containers:
@@ -868,10 +870,10 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
         
         else:
             pd.concat([
-                pd.Series(*np.unique(visualisation_data.loc[subgroup_indices][target], return_counts=True)[::-1], name='Subgroup') \
-                                / visualisation_data.loc[subgroup_indices][target].count(),
-                pd.Series(*np.unique(visualisation_data[target], return_counts=True)[::-1], name='Complement') \
-                                / visualisation_data[target].count()
+                pd.Series(*np.unique(target_data.loc[subgroup_indices], return_counts=True)[::-1], name='Subgroup') \
+                                / target_data.loc[subgroup_indices].count(),
+                pd.Series(*np.unique(target_data, return_counts=True)[::-1], name='Complement') \
+                                / target_data.count()
             ],axis=1).T.plot(kind='barh', stacked=True, cmap=plt.get_cmap('Set2'), ax=ax)
             
             for container in ax.containers:

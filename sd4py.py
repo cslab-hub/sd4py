@@ -431,28 +431,30 @@ def discover_subgroups(
         The discovered subgroups. 
     '''
     
-    if target_value is not None :
-    
-        if isinstance(ontology, PyOntology):
+    if isinstance(ontology, PyOntology):
+
+        if target_value is not None:
         
             raise ValueError("target_value cannot be provided when passing in a PyOntology instead of a pands DataFrame.")
-        
-        target_bool = ontology[target] == target_value
-        
-        ontology = ontology.drop(columns=target).join(target_bool)
 
-    elif ontology[target].dtype == 'bool':
-
-        target_value = True
+    else:
     
-    elif ontology[target].dtype == 'object' or ontology[target].dtype.name == 'category':
+        if target_value is not None:
+    
+            target_bool = ontology[target] == target_value
         
-        target_value = ontology[target].iloc[0]
-    
-    if not isinstance(ontology, PyOntology):
-    
+            ontology = ontology.drop(columns=target).join(target_bool)
+
+        elif ontology[target].dtype == 'bool':
+
+            target_value = True
+        
+        elif ontology[target].dtype == 'object' or ontology[target].dtype.name == 'category':
+        
+           target_value = ontology[target].iloc[0]
+        
         ontology = PyOntology(ontology.reset_index(drop=True)) ## Reset index because pandas seems to confuse itself when there is a MultiIndex!!!
-    
+        
     ont = ontology.ontology
     
     includedAttributes = java.util.HashSet()
