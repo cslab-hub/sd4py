@@ -858,9 +858,9 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
 
         if use_complement:
             pd.concat([
-                pd.Series(*np.unique(target_data.loc[subgroup_indices], return_counts=True)[::-1], name='Subgroup') \
+                pd.Series(*np.unique(target_data.loc[subgroup_indices].dropna(), return_counts=True)[::-1], name='Subgroup') \
                                 / target_data.loc[subgroup_indices].count(),
-                pd.Series(*np.unique(target_data.drop(subgroup_indices, axis=0), return_counts=True)[::-1], name='Complement') \
+                pd.Series(*np.unique(target_data.drop(subgroup_indices, axis=0).dropna(), return_counts=True)[::-1], name='Complement') \
                                 / target_data.drop(subgroup_indices, axis=0).count()
             ],axis=1).T.plot(kind='barh', stacked=True, cmap=plt.get_cmap('Set2'), ax=ax)
                         
@@ -870,9 +870,9 @@ def subgroup_overview(subgroup, selection_data, visualisation_data=None, use_com
         
         else:
             pd.concat([
-                pd.Series(*np.unique(target_data.loc[subgroup_indices], return_counts=True)[::-1], name='Subgroup') \
+                pd.Series(*np.unique(target_data.loc[subgroup_indices].dropna(), return_counts=True)[::-1], name='Subgroup') \
                                 / target_data.loc[subgroup_indices].count(),
-                pd.Series(*np.unique(target_data, return_counts=True)[::-1], name='Complement') \
+                pd.Series(*np.unique(target_data.dropna(), return_counts=True)[::-1], name='Complement') \
                                 / target_data.count()
             ],axis=1).T.plot(kind='barh', stacked=True, cmap=plt.get_cmap('Set2'), ax=ax)
             
