@@ -1,5 +1,7 @@
 # SD4Py
 
+* License: LGPL (GNU Lesser General Public License v3.0)
+
 SD4Py is a package that makes it easy to perform subgroup discovery on tabular data. It is extremely simple to use. Call the `sd4py.discover_subgroups()` function on a Pandas dataframe and a collection of subgroups will be returned. 
 
 This package provides a Python interface for using the Java application VIKAMINE. 
