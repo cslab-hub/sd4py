@@ -97,7 +97,7 @@ class PyOntology:
 
 class PyNumericSelector:
     '''
-    Represents a rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
+    Represents a selection expression, i.e., a (simple) rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
     The relevant attribute name in the data is stored in `attribute`. 
     This contains a `numeric lower_bound`, `upper_bound`, plus booleans `include_lower_bound` and `include_upper_bound` to decide whether border values are included in the selection. 
     
@@ -155,7 +155,7 @@ class PyNumericSelector:
 
 class PyNominalSelector:
     '''
-    Represents a rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
+    Represents a selection expression, i.e., a (simple) rule to select a subset of data, which combines with other selectors to form the subgroup/pattern definition. 
     It indicates an attribute-value pair through `attribute` and `value`.
     
     Note that this is detached from the Java runtime, and so is a plain python object. 
