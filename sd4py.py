@@ -14,11 +14,11 @@ The package contains a `discover_subgroups()` function that finds subgroups base
 import jpype
 import jpype.imports
 from jpype.types import *
-jpype.startJVM(classpath=['vikamine_kernel.jar'])
+jpype.startJVM(classpath=['vikamine_kernel.jar', 'sd4py.jar'])
 import java.util.HashSet
 
-from org.vikamine.kernel._examples import *
 from org.vikamine.kernel.subgroup.selectors import *
+from org.sd4py.kernel import *
 
 import pandas as pd
 import numpy as np
@@ -89,7 +89,7 @@ class PyOntology:
         numeric_arrays = JArray(JArray(JDouble))(numeric_arrays)
         nominal_arrays = JArray(JArray(JString))(nominal_arrays)
         
-        self.ontology = PythonOntologyCreator(JArray(JString)(self.column_names), 
+        self.ontology = SD4PyOntologyCreator(JArray(JString)(self.column_names), 
                                               JArray(JString)(self.column_types),
                                               numeric_arrays,
                                               nominal_arrays).ontology
@@ -368,7 +368,7 @@ def discover_subgroups(
     method: string, optional
         Used to decide which algorithm to use. Must be one of Beam-Search `beam`, BSD `bsd`, SD-Map `sdmap`, SD-Map enabling internal disjunctions `sdmap-dis`. The default is `sdmap`.
     qf: string, optional
-        Used to decide which algorithm to use. Must be one of Adjusted Residuals `ares`, Binomial Test `bin`, Chi-Square Test `chi2`, Gain `gain`, Lift `lift`, Piatetsky-Shapiro `ps`, Relative Gain `relgain`, Weighted Relative Accuracy `wracc`. The default is qf = `ps`.
+        Used to decide which algorithm to use. Must be one of Adjusted Residuals `ares`, Binomial Test `bin`, Chi-Square Test `chi2`, Gain `gain`, Lift `lift`, Piatetsky-Shapiro `ps`, Relative Gain `relgain`, Weighted Relative Accuracy `wracc`, Wilcoxon-Mann-Whitney Rank `wmw`, Area-Under-Curve `auc`. The default is qf = `ps`.
     k: int, optional
         Maximum number (top-k) of patterns to discover, i.e., the best k patterns according to the selected quality function. The default is 20. 
     minqual: float, optional
@@ -431,7 +431,7 @@ def discover_subgroups(
     if target not in includedAttributes:
         includedAttributes.add(target)
     
-    subgroups = PythonDiscoverSubgroups.discoverSubgroups(
+    subgroups = SD4Py.discoverSubgroups(
         ont,
         JString(target),
         includedAttributes,
@@ -536,4 +536,3 @@ def discover_subgroups(
         )
     
     return PySubgroupResults(py_subgroups, population_value, population_size, target, target_value)
-
