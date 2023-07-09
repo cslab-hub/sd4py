@@ -50,7 +50,7 @@ class PyOntology:
         numeric_arrays = []
         nominal_arrays = []
         
-        for name, x in df.iteritems():
+        for name, x in iter(df.items()):
             
             if x.dtype == 'object' or x.dtype == 'bool' or x.dtype.name == 'category': # category depends on whether it's ordered?
 
