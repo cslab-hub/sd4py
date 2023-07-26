@@ -1,4 +1,4 @@
-package org.vikamine.kernel._examples;
+package org.sd4py.kernel;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,7 +12,7 @@ import org.vikamine.kernel.data.NominalAttribute;
 import org.vikamine.kernel.data.Ontology;
 import org.vikamine.kernel.data.creators.DataFactory;
 
-public class PythonOntologyCreator {
+public class SD4PyOntologyCreator {
     
     public Ontology ontology;
     
@@ -34,7 +34,7 @@ public class PythonOntologyCreator {
         return mainList;
     }
     
-    public PythonOntologyCreator(String[] columnNames, String[] columnTypes, double[][] numericArrays, String[][] nominalArrays) throws Exception {
+    public SD4PyOntologyCreator(String[] columnNames, String[] columnTypes, double[][] numericArrays, String[][] nominalArrays) throws Exception {
 	
 	List<Attribute> attributes = new ArrayList<Attribute>();
 	AttributeBuilder basicBuilder = new AttributeBuilder();

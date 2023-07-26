@@ -1,4 +1,4 @@
-package org.vikamine.kernel._examples;
+package org.sd4py.kernel;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -15,10 +15,12 @@ import org.vikamine.kernel.subgroup.SGFilters;
 import org.vikamine.kernel.subgroup.SGSet;
 import org.vikamine.kernel.subgroup.analysis.WeightedCoveringAnalyzer;
 import org.vikamine.kernel.subgroup.quality.functions.AdjustedResidualQF;
+import org.vikamine.kernel.subgroup.quality.functions.AreaUnderCurveQF;
 import org.vikamine.kernel.subgroup.quality.functions.BinomialQF;
 import org.vikamine.kernel.subgroup.quality.functions.ChiSquareQF;
 import org.vikamine.kernel.subgroup.quality.functions.InformationGainQF;
 import org.vikamine.kernel.subgroup.quality.functions.LiftQF;
+import org.vikamine.kernel.subgroup.quality.functions.MannWhitneyQF;
 import org.vikamine.kernel.subgroup.quality.functions.PiatetskyShapiroQF;
 import org.vikamine.kernel.subgroup.quality.functions.RelativeGainQF;
 import org.vikamine.kernel.subgroup.quality.functions.WRAccQF;
@@ -37,7 +39,7 @@ import org.vikamine.kernel.subgroup.target.NumericTarget;
 import org.vikamine.kernel.subgroup.target.SGTarget;
 import org.vikamine.kernel.subgroup.target.SelectorTarget;
 
-public class PythonDiscoverSubgroups {
+public class SD4Py {
     
     public static SGSet discoverSubgroups(
 	    Ontology ontology,
@@ -75,7 +77,7 @@ public class PythonDiscoverSubgroups {
 	    throw new IllegalStateException("Unknown type of target attribute");
 	}
 	
-	// Filter out attributes that we won't use
+	// Filter out attributes that we will not use
 	Set<Attribute> setAttributes = ontology.getAttributes();
 	for (Iterator<Attribute> iter = setAttributes.iterator(); iter.hasNext();) {
 	    Attribute next = iter.next();
@@ -133,12 +135,16 @@ public class PythonDiscoverSubgroups {
 	    break;
 	case "wracc":
 	    task.setQualityFunction(new WRAccQF());
+	case "wmw":
+		task.setQualityFunction(new MannWhitneyQF());
+	case "auc":
+		task.setQualityFunction(new AreaUnderCurveQF());
 	    break;
         default:
             throw new IllegalArgumentException("Invalid quality function type. Please select one of: " +
         	    "Adjusted Residuals ares, Binomial Test bin, Chi-Square Test " + 
-                    "chi2, Gain gain, Lift lift, Piatetsky-Shapiro ps, Relative Gain relgain, Weighted Relative " + 
-                    "Accuracy wracc."
+                    "chi2, Gain gain, Lift lift, Piatetsky-Shapiro ps, Relative Gain relgain, " + 
+                    "Weighted Relative Accuracy wracc, " + "Wilcoxon-Mann-Whitney rank wmw, " + "AUC auc."
         	    );
 	}
 
@@ -155,8 +161,7 @@ public class PythonDiscoverSubgroups {
 		break;
 	case "sdmap":
 		if (sgTarget.isNumeric()) {
-		    // in the numeric case, we choose the numeric variant of the BSD
-		    // algorithm
+		    // in the numeric case, we choose the numeric variant of the BSD algorithm
 		    task.setMethodType(SDMapNumeric.class);
 		} else {
 		    task.setMethodType(SDMap.class);
