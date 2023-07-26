@@ -15,7 +15,7 @@ import jpype
 import jpype.imports
 from jpype.types import *
 
-jpype.startJVM(classpath=["vikamine_kernel.jar"])
+jpype.startJVM(classpath=["vikamine_kernel.jar", "sd4py.jar"])
 import java.util.HashSet
 
 from org.vikamine.kernel.subgroup.selectors import *
@@ -51,7 +51,7 @@ class PyOntology:
         numeric_arrays = []
         nominal_arrays = []
 
-        for name, x in df.iteritems():
+        for name, x in iter(df.items()):
             if (
                 x.dtype == "object" or x.dtype == "bool" or x.dtype.name == "category"
             ):  # category depends on whether it's ordered?
@@ -85,7 +85,7 @@ class PyOntology:
         numeric_arrays = JArray(JArray(JDouble))(numeric_arrays)
         nominal_arrays = JArray(JArray(JString))(nominal_arrays)
 
-        self.ontology = PythonOntologyCreator(
+        self.ontology = SD4PyOntologyCreator(
             JArray(JString)(self.column_names),
             JArray(JString)(self.column_types),
             numeric_arrays,
@@ -475,7 +475,7 @@ def discover_subgroups(
     if target not in includedAttributes:
         includedAttributes.add(target)
 
-    subgroups = PythonDiscoverSubgroups.discoverSubgroups(
+    subgroups = SD4Py.discoverSubgroups(
         ont,
         JString(target),
         includedAttributes,
