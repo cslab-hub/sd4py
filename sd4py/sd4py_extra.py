@@ -7,7 +7,7 @@ import matplotlib.colors as mcolors
 from textwrap import wrap
 import datetime
 import networkx as nx
-import sd4py
+from sd4py import sd4py
 
 
 def bootstrapping(
@@ -266,15 +266,21 @@ def confidence_intervals(
     )
 
 
-def confidence_intervals_to_boxplots(bootstrapping_results_list, labels):
+def confidence_intervals_to_boxplots(bootstrapping_results, labels=None):
     """
     Takes the outputs of the `confidence_intervals` function and creates a boxplot showing the distribution of the target value,
     with the width of boxes indicating the relative sizes of the subgroups on average.
 
     Parameters
     ----------------
-    bootstrapping_results_list: list
-        A list with subgroup bootstrapping results as values. Note that the first output from confidence_intervals() is a dictionary, this must be converted into a list by the user for consistent ordering/display.
+    bootstrapping_results: dict of lists, or list of lists
+        The first output from confidence_intervals() is a dictionary, and can be passed directly into this parameter.
+        The subgroups will be sorted in order to ensure a consistent display order.
+        If this approach is taken, then the `labels' parameter should not be provided.
+
+        Alternatively, a list with the results for multiple bootstrapping trials can be provided.
+        If this approach is taken, then the corresponding subgroup labels should also be provided in the `labels' parameter.
+        This approach offers the flexibility to choose which order the subgroups appear in.
     labels: list
         The label to use for each subgroup.
 
@@ -284,12 +290,28 @@ def confidence_intervals_to_boxplots(bootstrapping_results_list, labels):
         The matplotlib Figure of the boxplots
     """
 
-    averages = np.stack([np.array(x)[:, 1] for x in bootstrapping_results_list])
+    if isinstance(bootstrapping_results, dict):
+        labels = []
+        resultses = []
+
+        for name, results in sorted(bootstrapping_results.items()):
+            labels.append(re.sub("AND", "\nAND", name))
+            resultses.append(results)
+
+        bootstrapping_results = resultses
+
+    else:
+        if labels is None:
+            raise ValueError(
+                "If a dictionary is not provided as an input, then the corresponding labels argument must also be provided."
+            )
+
+    averages = np.stack([np.array(x)[:, 1] for x in bootstrapping_results])
 
     for idx, row in enumerate(averages):
         averages[idx][np.isnan(row)] = row[~np.isnan(row)].mean()  # remove nan
 
-    widths = [np.array(x)[:, 0].mean() for x in bootstrapping_results_list]
+    widths = [np.array(x)[:, 0].mean() for x in bootstrapping_results]
     widths = (
         0.9 * np.array(widths) / np.max(widths)
     )  ## Box thickness relative to the maximum shown. Adjusted by 0.9 to avoid overlap
@@ -792,7 +814,7 @@ def radar_plot(
             try:
                 labels = ["{:.2f}".format(float(item)) for item in labels]
 
-            except:
+            except:  ## If this branch still throws an error, then check for duplicate index entries in the dataset
                 labels = [
                     "{0} days\n{1:02d}:{2:02d}:{3:02d}".format(*item.components)
                     for item in labels
