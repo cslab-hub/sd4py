@@ -32,3 +32,7 @@ The second is Pandas, which is used to store and manipulate tabular data. The da
 ## Basic usage example 
 
 Please see the basic usage example provided as a notebook on the SD4Py GitHub page <https://github.com/cslab-hub/sd4py> to see how to get started quickly. 
+
+## Detailed documentation
+
+Documentation can be accessed by using the `help' function within Python, or from the website <https://cslab-hub.github.io/sd4py>. 
