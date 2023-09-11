@@ -10,12 +10,13 @@ One of the key benefits of this approach is that the outputs are interpretable, 
 
 The package contains a `discover_subgroups()` function that finds subgroups based on a pandas `DataFrame` and a specifed target column. The package also includes custom python objects for holding the results. 
 """
+import pkg_resources
 
 import jpype
 import jpype.imports
 from jpype.types import *
 
-jpype.startJVM(classpath=["vikamine_kernel.jar", "sd4py.jar"])
+jpype.startJVM(classpath=[pkg_resources.resource_filename("sd4py", "vikamine_kernel.jar"), pkg_resources.resource_filename("sd4py", "sd4py.jar")])  ## resource_filename to make it work in a distributed package
 import java.util.HashSet
 
 from org.vikamine.kernel.subgroup.selectors import *
