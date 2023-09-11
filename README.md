@@ -35,4 +35,4 @@ Please see the basic usage example provided as a notebook on the SD4Py GitHub pa
 
 ## Detailed documentation
 
-Documentation can be accessed by using the `help' function within Python, or from the website <https://cslab-hub.github.io/sd4py>. 
+Documentation can be accessed by using the `help` function within Python, or from the website <https://cslab-hub.github.io/sd4py>. 
