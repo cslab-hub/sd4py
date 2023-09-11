@@ -1,0 +1,2 @@
+include sd4py/*.java 
+include sd4py/*.jar
