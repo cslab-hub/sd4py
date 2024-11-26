@@ -961,12 +961,16 @@ def subgroup_overview(
         nominal_ymins = pd.Series(dtype=object)
         nominal_ymaxes = pd.Series(dtype=object)
 
-        subgroup_indices = subgroup.get_indices(visualisation_data)
+        subgroup_indices = subgroup.get_indices(selection_data)
 
         ## Numerics
 
         if numeric_columns is not None:
             subgroup_means = visualisation_data.loc[subgroup_indices][
+                numeric_columns
+            ].mean(numeric_only=False)
+
+            complement_means = visualisation_data[~visualisation_data.index.isin(subgroup_indices)][
                 numeric_columns
             ].mean(numeric_only=False)
 
@@ -1000,6 +1004,10 @@ def subgroup_overview(
                 numeric_only=False
             )  ## Minimum of (complement - 1 std) and (subgroup_mean)
 
+            numeric_ymins = pd.concat([numeric_ymins, complement_means], axis=1).T.min(
+                numeric_only=False
+            )  ## Minimum of (complement - 1 std) and (subgroup_mean) and (complement_mean)
+
             numeric_ymaxes = vis_data_numerics.mean(numeric_only=False) + (
                 vis_data_numerics.std(numeric_only=False)
             )
@@ -1007,6 +1015,10 @@ def subgroup_overview(
             numeric_ymaxes = pd.concat([numeric_ymaxes, subgroup_means], axis=1).T.max(
                 numeric_only=False
             )  ## Maximum of (complement + 1 std) and (subgroup_mean)
+
+            numeric_ymaxes = pd.concat([numeric_ymaxes, complement_means], axis=1).T.max(
+                numeric_only=False
+            )  ## Maximum of (complement + 1 std) and (subgroup_mean) and (complement_mean)
 
         ## Now the nominals
 
